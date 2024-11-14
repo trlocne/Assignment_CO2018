@@ -8,6 +8,9 @@
 #include "mm.h"
 #include <stdlib.h>
 #include <stdio.h>
+//include thêm
+#include <pthread.h>
+static pthread_mutex_t mmvm_lock = PTHREAD_MUTEX_INITIALIZER;
 
 /*enlist_vm_freerg_list - add new rg to freerg_list
  *@mm: memory region
@@ -90,25 +93,27 @@ int __alloc(struct pcb_t *caller, int vmaid, int rgid, int size, int *alloc_addr
     caller->mm->symrgtbl[rgid].rg_start = rgnode.rg_start;
     caller->mm->symrgtbl[rgid].rg_end = rgnode.rg_end;
 
-    caller->mm->symrgtbl[rgid].vmaid = rgnode.vmaid;
+    caller->mm->symrgtbl[rgid].vmaid = vmaid;
 
     *alloc_addr = rgnode.rg_start;
 
     return 0;
-  }
+  }    
 
+  pthread_mutex_init(&mmvm_lock,NULL);
   /* TODO: get_free_vmrg_area FAILED handle the region management (Fig.6)*/
+
 
   /* TODO retrive current vma if needed, current comment out due to compiler redundant warning*/
   /*Attempt to increate limit to get space */
+  struct vm_area_struct *cur_vma = get_vma_by_num(caller->mm, vmaid);
+  int inc_sz = PAGING_PAGE_ALIGNSZ(size); // số lượng page cần -> làm tròn lên
   //struct vm_area_struct *cur_vma = get_vma_by_num(caller->mm, vmaid);
-
-
-  int inc_sz = PAGING_PAGE_ALIGNSZ(size);
+  
   int inc_limit_ret;
 
   /* TODO retrive old_sbrk if needed, current comment out due to compiler redundant warning*/
-  //int old_sbrk = cur_vma->sbrk;
+  int old_sbrk = cur_vma->sbrk;  
 
   /* TODO INCREASE THE LIMIT
    * inc_vma_limit(caller, vmaid, inc_sz)
@@ -116,11 +121,31 @@ int __alloc(struct pcb_t *caller, int vmaid, int rgid, int size, int *alloc_addr
   inc_vma_limit(caller, vmaid, inc_sz, &inc_limit_ret);
 
   /* TODO: commit the limit increment */
+  pthread_mutex_lock(&mmvm_lock);
+  if(inc_vma_limit(caller, vmaid, inc_sz, &inc_limit_ret) != 0){
+    pthread_mutex_unlock(&mmvm_lock);
+    return -1;
+  }
+  pthread_mutex_unlock(&mmvm_lock);
+
+  /*Successful increase limit */  
+  caller->mm->symrgtbl[rgid].rg_start = old_sbrk;
+  caller->mm->symrgtbl[rgid].rg_end = old_sbrk + size;
+  caller->mm->symrgtbl[rgid].vmaid = vmaid;
+
+  // collect the remain region
+  if (old_sbrk + size < inc_limit_ret)
+  {
+    struct vm_rg_struct *remain_rg = init_vm_rg(old_sbrk + size, cur_vma->vm_end, vmaid);
+    enlist_vm_freerg_list(caller->mm, *remain_rg);
+  }
+  
 
   /* TODO: commit the allocation address 
   // *alloc_addr = ...
   */
 
+  *alloc_addr = old_sbrk;
   return 0;
 }
 
@@ -133,22 +158,24 @@ int __alloc(struct pcb_t *caller, int vmaid, int rgid, int size, int *alloc_addr
  */
 int __free(struct pcb_t *caller, int rgid)
 {
+  pthread_mutex_lock(&mmvm_lock);
   struct vm_rg_struct rgnode;
-
   // Dummy initialization for avoding compiler dummay warning
   // in incompleted TODO code rgnode will overwrite through implementing
   // the manipulation of rgid later
-  rgnode.vmaid = 0;  //dummy initialization
-  rgnode.vmaid = 1;  //dummy initialization
+  // rgnode.vmaid = 0;  //dummy initialization
+  // rgnode.vmaid = 1;  //dummy initialization 
 
-  if(rgid < 0 || rgid > PAGING_MAX_SYMTBL_SZ)
+  if(rgid < 0 || rgid > PAGING_MAX_SYMTBL_SZ){
+    pthread_mutex_unlock(&mmvm_lock);
     return -1;
-
+  }  
   /* TODO: Manage the collect freed region to freerg_list */
-  
+  rgnode = (caller->mm->symrgtbl[rgid]);    
 
   /*enlist the obsoleted memory region */
   enlist_vm_freerg_list(caller->mm, rgnode);
+  pthread_mutex_unlock(&mmvm_lock);
 
   return 0;
 }
@@ -204,14 +231,17 @@ int pg_getpage(struct mm_struct *mm, int pgn, int *fpn, struct pcb_t *caller)
   if (!PAGING_PTE_PAGE_PRESENT(pte))
   { /* Page is not online, make it actively living */
     int vicpgn, swpfpn; 
-    //int vicfpn;
-    //uint32_t vicpte;
+    int vicfpn;
+    uint32_t vicpte;
 
     int tgtfpn = PAGING_PTE_SWP(pte);//the target frame storing our variable
 
     /* TODO: Play with your paging theory here */
-    /* Find victim page */
-    find_victim_page(caller->mm, &vicpgn);
+    /* Find victim page */        
+    if(find_victim_page(caller->mm, &vicpgn) != 0) return -1;
+    /* Find victim frame */
+    vicpte = caller->mm->pgd[vicpgn];
+    vicfpn = PAGING_FPN(vicpte);
 
     /* Get free frame in MEMSWP */
     MEMPHY_get_freefp(caller->active_mswp, &swpfpn);
@@ -219,12 +249,12 @@ int pg_getpage(struct mm_struct *mm, int pgn, int *fpn, struct pcb_t *caller)
 
     /* Do swap frame from MEMRAM to MEMSWP and vice versa*/
     /* Copy victim frame to swap */
-    //__swap_cp_page();
+    __swap_cp_page(caller->mram, vicfpn, caller->active_mswp, swpfpn);
     /* Copy target frame from swap to mem */
-    //__swap_cp_page();
+    __swap_cp_page(caller->active_mswp, tgtfpn, caller->mram, vicfpn);
 
     /* Update page table */
-    //pte_set_swap() &mm->pgd;
+    pte_set_swap(&mm->pgd[vicpgn], 0, swpfpn);
 
     /* Update its online status of the target page */
     //pte_set_fpn() & mm->pgd[pgn];
@@ -233,7 +263,7 @@ int pg_getpage(struct mm_struct *mm, int pgn, int *fpn, struct pcb_t *caller)
     enlist_pgn_node(&caller->mm->fifo_pgn,pgn);
   }
 
-  *fpn = PAGING_PTE_FPN(pte);
+  *fpn = PAGING_PTE_FPN(pte); // get 13 bit last
 
   return 0;
 }
@@ -412,14 +442,23 @@ struct vm_rg_struct* get_vm_area_node_at_brk(struct pcb_t *caller, int vmaid, in
 {
   struct vm_rg_struct * newrg;
   /* TODO retrive current vma to obtain newrg, current comment out due to compiler redundant warning*/
-  //struct vm_area_struct *cur_vma = get_vma_by_num(caller->mm, vmaid);
+  struct vm_area_struct *cur_vma = get_vma_by_num(caller->mm, vmaid);
 
   newrg = malloc(sizeof(struct vm_rg_struct));
 
-  /* TODO: update the newrg boundary
+  /* TODO: update the newrg boundary  
   // newrg->rg_start = ...
-  // newrg->rg_end = ...
+  // newrg->rg_end = ...  
   */
+ if(vmaid == 0){
+  newrg->rg_start = cur_vma->sbrk;
+  newrg->rg_end = newrg->rg_start + size;
+ }
+ else{
+  // implement for heap segment
+  newrg->rg_start = cur_vma->sbrk;
+  newrg->rg_end = newrg->rg_start - size;
+ }
 
   return newrg;
 }
@@ -433,11 +472,46 @@ struct vm_rg_struct* get_vm_area_node_at_brk(struct pcb_t *caller, int vmaid, in
  */
 int validate_overlap_vm_area(struct pcb_t *caller, int vmaid, int vmastart, int vmaend)
 {
-  //struct vm_area_struct *vma = caller->mm->mmap;
+ struct vm_area_struct *vma = caller->mm->mmap;
 
   /* TODO validate the planned memory area is not overlapped */
+  while (vma != NULL) {
+    // Kiểm tra nếu không cùng vm_id và kích thước vùng nhớ không phải là 0
+    if ((vma->vm_id == vmaid) && (vma->vm_start != vma->vm_end)) 
+    {
+      // Kiểm tra điều kiện chồng lấp trong cùng loại vmarea
+      if ((int)((vmaend - 1 - vma->vm_start) * (vma->vm_end - 1 - vmastart)) >= 0)
+      {
+        return -1;
+      }
+      
+      // Kiểm tra điều kiện bao gồm trong cùng loại vmarea
+      if ((int)((vmastart - vma->vm_start) * (vma->vm_end - vmaend)) >= 0)
+      {
+        return -1;
+      }
+    }
 
+    // Kiểm tra chồng lấp giữa data segment (vmaid = 0) và heap segment (vmaid = 1)
+    if ((vmaid == 0 && vma->vm_id == 1) || (vmaid == 1 && vma->vm_id == 0)) 
+    {
+      // Kiểm tra điều kiện chồng lấp giữa data segment và heap segment
+      if ((int)((vmaend - 1 - vma->vm_start) * (vma->vm_end - 1 - vmastart)) >= 0)
+      {
+        return -1;
+      }
 
+      // Kiểm tra điều kiện bao gồm giữa data segment và heap segment
+      if ((int)((vmastart - vma->vm_start) * (vma->vm_end - vmaend)) >= 0)
+      {
+        return -1;
+      }
+    }
+
+    vma = vma->vm_next;
+  }
+
+  /* Nếu không phát hiện trùng lặp, trả về 0 */
   return 0;
 }
 
@@ -465,13 +539,22 @@ int inc_vma_limit(struct pcb_t *caller, int vmaid, int inc_sz, int* inc_limit_re
   /* TODO: Obtain the new vm area based on vmaid */
   //cur_vma->vm_end... 
   // inc_limit_ret...
+  if(vmaid == 0){
+    cur_vma->vm_end += inc_amt;
+    cur_vma->sbrk += inc_amt;
+  }
+  else{
+    cur_vma->vm_end -= inc_amt;
+    cur_vma->sbrk -= inc_amt;
+  }
+
+  *inc_limit_ret = cur_vma->vm_end;
 
   if (vm_map_ram(caller, area->rg_start, area->rg_end, 
                     old_end, incnumpage , newrg) < 0)
     return -1; /* Map the memory to MEMRAM */
 
   return 0;
-
 }
 
 /*find_victim_page - find victim page
@@ -484,10 +567,16 @@ int find_victim_page(struct mm_struct *mm, int *retpgn)
   struct pgn_t *pg = mm->fifo_pgn;
 
   /* TODO: Implement the theorical mechanism to find the victim page */
-
+  if(pg == NULL)
+  {
+    *retpgn = -1;
+    return -1;
+  }
+  *retpgn = pg->pgn;
+  mm->fifo_pgn = pg->pg_next;
   free(pg);
 
-  return 0;
+  return 0;  
 }
 
 /*get_free_vmrg_area - get a free vm region
