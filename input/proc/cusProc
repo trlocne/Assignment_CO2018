@@ -1,0 +1,8 @@
+0 7
+alloc 300 4
+alloc 300 5
+malloc 900 2
+malloc 900 1
+write 90 1 123
+read 1 128 0
+read 1 123 0

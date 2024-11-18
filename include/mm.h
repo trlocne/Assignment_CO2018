@@ -24,7 +24,10 @@
 
 /* PTE BIT PRESENT */
 #define PAGING_PTE_SET_PRESENT(pte) (pte=pte|PAGING_PTE_PRESENT_MASK)
+#define PAGING_PTE_SET_DIRTY(pte) (pte=pte|PAGING_PTE_DIRTY_MASK)
 #define PAGING_PTE_PAGE_PRESENT(pte) (pte&PAGING_PTE_PRESENT_MASK)
+#define PAGING_PTE_PAGE_SWAPPED(pte) (pte&PAGING_PTE_SWAPPED_MASK)
+#define PAGING_PTE_PAGE_DIRTY(pte) (pte&PAGING_PTE_DIRTY_MASK)
 
 /* USRNUM */
 #define PAGING_PTE_USRNUM_LOBIT 15
@@ -94,9 +97,9 @@
 
 /* Memory range operator */
 /* TODO implement the INCLUDE checking mechanism - currently dummy op only */
-#define INCLUDE(x1,x2,y1,y2) (0)
+#define INCLUDE(x1,x2,y1,y2) (((y1-x1)*(x2-y2)>=0)?1:0)
 /* TODO implement the OVERLAP checking mechanism - currently dummy op only */
-#define OVERLAP(x1,x2,y1,y2) (1)
+#define OVERLAP(x1,x2,y1,y2) (((y2-x1)*(x2-y1)>=0)?0:1)
 
 /* VM region prototypes */
 struct vm_rg_struct * init_vm_rg(int rg_start, int rg_endi, int vmaid);

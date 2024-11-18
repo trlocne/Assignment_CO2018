@@ -6,6 +6,7 @@
 
 #include "mm.h"
 #include <stdlib.h>
+#include <stdio.h>
 
 /*
  *  MEMPHY_mv_csr - move MEMPHY cursor
@@ -81,7 +82,7 @@ int MEMPHY_seq_write(struct memphy_struct * mp, int addr, BYTE value)
      return -1; /* Not compatible mode for sequential read */
 
    MEMPHY_mv_csr(mp, addr);
-   mp->storage[addr] = value;
+   mp->storage[addr] = value;   
 
    return 0;
 }
@@ -93,14 +94,19 @@ int MEMPHY_seq_write(struct memphy_struct * mp, int addr, BYTE value)
  *  @data: written data
  */
 int MEMPHY_write(struct memphy_struct * mp, int addr, BYTE data)
-{
-   if (mp == NULL)
-     return -1;
-
-   if (mp->rdmflg)
-      mp->storage[addr] = data;
-   else /* Sequential access device */
+{   
+   if (mp == NULL){      
+      return -1;
+   }
+     
+   if (mp->rdmflg){      
+      mp->storage[addr] = data;      
+   }      
+   else /* Sequential access device */{      
       return MEMPHY_seq_write(mp, addr, data);
+   }
+      
+      
 
    return 0;
 }
@@ -159,9 +165,18 @@ int MEMPHY_dump(struct memphy_struct * mp)
 {
     /*TODO dump memphy contnt mp->storage 
      *     for tracing the memory content
-     */
-
-    return 0;
+     */      
+   if(mp && mp->storage)
+   {      
+      for(int i=0;i<mp->maxsz;i+=1)
+      {         
+         if(mp->storage[i]!=0)
+         {            
+            printf("[%d, %d]\n",i,mp->storage[i]);
+         }
+      }
+   }   
+   return 0;    
 }
 
 int MEMPHY_put_freefp(struct memphy_struct *mp, int fpn)
