@@ -168,7 +168,7 @@ int alloc_pages_range(struct pcb_t *caller, int req_pgnum, struct framephy_struc
       }
       // swap to get free frame      
       uint32_t vicpte = caller->mm->pgd[vicpgn];            
-      int vicfpn = PAGING_PTE_FPN(vicpte); // wrong frame num            
+      int vicfpn = PAGING_PTE_FPN(vicpte); 
       __swap_cp_page(caller->mram, vicfpn, caller->active_mswp, swpfpn);
       pte_set_swap(&caller->mm->pgd[vicpgn], 0, swpfpn);
 

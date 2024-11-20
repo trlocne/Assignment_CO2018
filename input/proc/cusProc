@@ -1,8 +1,10 @@
-0 7
-alloc 300 4
-alloc 300 5
-malloc 900 2
-malloc 900 1
-write 90 1 123
-read 1 128 0
-read 1 123 0
+0 9
+alloc 256 1
+alloc 256 2
+write 90 1 253
+read 1 253 2
+read 2 253 1
+free 1
+alloc 256 1
+read 1 253 2
+read 2 253 1

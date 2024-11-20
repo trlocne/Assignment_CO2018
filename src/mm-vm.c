@@ -30,9 +30,11 @@ int enlist_vm_freerg_list(struct mm_struct *mm, struct vm_rg_struct* rg_elmt)
       return -1;
     }
 
+    int vmaid = rg_elmt->vmaid;
     int lower_bound = rg_elmt->rg_start;
     int upper_bound = rg_elmt->rg_end;
-    int vmaid = rg_elmt->vmaid;
+    int temp_lower_bound = (vmaid) ? (lower_bound + 1) : (lower_bound - 1);
+    int temp_upper_bound = (vmaid) ? (upper_bound - 1) : (upper_bound + 1);    
 
     // // Kiểm tra giá trị hợp lệ
     if(lower_bound >= upper_bound && rg_elmt->vmaid == 0) {
@@ -80,28 +82,22 @@ int enlist_vm_freerg_list(struct mm_struct *mm, struct vm_rg_struct* rg_elmt)
           prev->rg_next = rg_new_node;
       }        
       
-    }
+    }    
 
     // Merge với vùng liền kề phía trước (nếu có)
-    if (prev && prev->rg_end == lower_bound) {
+    if (prev && prev->rg_end == temp_lower_bound) {
       prev->rg_end = upper_bound;
       prev->rg_next = rg_new_node->rg_next;
       free(rg_new_node);
     }    
     
-
     // Merge với vùng liền kề phía sau (nếu có)
     struct vm_rg_struct *deleted = prev->rg_next; 
-    if (prev->rg_next && upper_bound == prev->rg_next->rg_start) {
+    if (prev->rg_next && temp_upper_bound == prev->rg_next->rg_start) {
       prev->rg_end = prev->rg_next->rg_end;
       prev->rg_next = deleted->rg_next;
       free(deleted);      
     }
-
-    // In danh sách vùng nhớ trống (tùy thuộc vào hàm print_list_rg)
-    // printf("Free region list:\n");
-    // print_list_rg(cur_vma->vm_freerg_list);
-
     return 0;
 }
 
@@ -142,7 +138,7 @@ struct vm_rg_struct *get_symrg_byid(struct mm_struct *mm, int rgid)
     return NULL;
 
   if(mm->symrgtbl[rgid].rg_start == -1 || mm->symrgtbl[rgid].rg_end == -1){
-    printf("access free region\n");
+    printf("ACCESS FREE REGION\n");
     return NULL;
   }
 
@@ -166,18 +162,13 @@ int __alloc(struct pcb_t *caller, int vmaid, int rgid, int size, int *alloc_addr
   // rgnode.vmaid
 
   if (get_free_vmrg_area(caller, vmaid, size, &rgnode) == 0)
-  {
-    // for debug
-    printf("get free rg successful -----------\n");
+  {        
     caller->mm->symrgtbl[rgid].rg_start = rgnode.rg_start;
     caller->mm->symrgtbl[rgid].rg_end = rgnode.rg_end;
 
     caller->mm->symrgtbl[rgid].vmaid = vmaid;
 
-    *alloc_addr = rgnode.rg_start;
-
-    // for debug
-    print_pgtbl(caller, 0, -1);
+    *alloc_addr = rgnode.rg_start;    
 
     return 0;
   }      
@@ -217,7 +208,7 @@ int __alloc(struct pcb_t *caller, int vmaid, int rgid, int size, int *alloc_addr
   /*Successful increase limit */  
   if(vmaid == 0){
     caller->mm->symrgtbl[rgid].rg_start = old_sbrk;
-    caller->mm->symrgtbl[rgid].rg_end = old_sbrk + size;
+    caller->mm->symrgtbl[rgid].rg_end = old_sbrk + size - 1;
     caller->mm->symrgtbl[rgid].vmaid = vmaid;    
     cur_vma->sbrk += size;
     // if (old_sbrk + size < inc_limit_ret)
@@ -229,7 +220,7 @@ int __alloc(struct pcb_t *caller, int vmaid, int rgid, int size, int *alloc_addr
   }
   else{
     caller->mm->symrgtbl[rgid].rg_start = old_sbrk;
-    caller->mm->symrgtbl[rgid].rg_end = old_sbrk - size;
+    caller->mm->symrgtbl[rgid].rg_end = old_sbrk - size + 1;
     caller->mm->symrgtbl[rgid].vmaid = vmaid;    
     cur_vma->sbrk -= size;
     // if (old_sbrk - size > inc_limit_ret)
@@ -400,7 +391,7 @@ int pg_getval(struct mm_struct *mm, int addr, BYTE *data, struct pcb_t *caller, 
 {
   int pgn = PAGING_PGN(addr);
   int off = PAGING_OFFST(addr);
-  pgn = vmaid ? (pgn + 1) : pgn;
+  // pgn = vmaid ? (pgn + 1) : pgn;
   off = vmaid ? (256 - off) : off;
   int fpn;
 
@@ -408,7 +399,8 @@ int pg_getval(struct mm_struct *mm, int addr, BYTE *data, struct pcb_t *caller, 
   if(pg_getpage(mm, pgn, &fpn, caller) != 0) 
     return -1; /* invalid page access */
 
-  int phyaddr = (fpn << PAGING_ADDR_FPN_LOBIT) + off;  
+  int phyaddr = (fpn << PAGING_ADDR_FPN_LOBIT) + off;    
+  
   MEMPHY_read(caller->mram,phyaddr, data);
 
   return 0;
@@ -426,17 +418,18 @@ int pg_setval(struct mm_struct *mm, int addr, BYTE value, struct pcb_t *caller, 
   int pgn = PAGING_PGN(addr);
   int off = PAGING_OFFST(addr);
   
-  pgn = vmaid ? (pgn + 1) : pgn;
-  off = vmaid ? (256 - off) : off;  
+  // pgn = vmaid ? (pgn + 1) : pgn;
+  off = vmaid ? (256 - off) : off;
   int fpn;
+    
   
-
   /* Get the page to MEMRAM, swap from MEMSWAP if needed */
-  if(pg_getpage(mm, pgn, &fpn, caller) != 0) 
+  if(pg_getpage(mm, pgn, &fpn, caller) != 0) {    
     return -1; /* invalid page access */
+  }
+    
 
   int phyaddr = (fpn << PAGING_ADDR_FPN_LOBIT) + off;  
-
   // set dirty bit
   if(MEMPHY_write(caller->mram,phyaddr, value) == 0){
     // PAGING_PTE_SET_DIRTY(mm->pgd[pgn]);
@@ -463,7 +456,10 @@ int __read(struct pcb_t *caller, int rgid, int offset, BYTE *data)
   struct vm_area_struct *cur_vma = get_vma_by_num(caller->mm, vmaid);
   if(cur_vma == NULL) /* Invalid memory identify */
 	  return -1;
-
+  if(offset > abs(currg->rg_start - currg->rg_end)){
+    printf("ACCESS OUT OF REGION\n");
+    return -1;
+  } 
   if(currg->vmaid == 0){
     pg_getval(caller->mm, currg->rg_start + offset, data, caller, cur_vma->vm_id);
   }
@@ -486,9 +482,8 @@ int pgread(
 		uint32_t destination) 
 {
   BYTE data;
-  int val = __read(proc, source, offset, &data);
-
-  destination = (uint32_t) data;
+  int val = __read(proc, source, offset, &data);  
+  
 #ifdef IODUMP
   printf("read region=%d offset=%d value=%d\n", source, offset, data);
 #ifdef PAGETBL_DUMP
@@ -496,6 +491,7 @@ int pgread(
 #endif
   MEMPHY_dump(proc->mram);
 #endif  
+  pgwrite(proc, data, destination, offset);
 
   return val;
 }
@@ -516,7 +512,11 @@ int __write(struct pcb_t *caller, int rgid, int offset, BYTE value)
 
   int vmaid = currg->vmaid;
 
-  struct vm_area_struct *cur_vma = get_vma_by_num(caller->mm, vmaid);  
+  struct vm_area_struct *cur_vma = get_vma_by_num(caller->mm, vmaid); 
+  if(offset > abs(currg->rg_start - currg->rg_end)){
+    printf("ACCESS OUT OF REGION\n");
+    return -1;
+  } 
   
   if(cur_vma == NULL) /* Invalid memory identify */
 	  return -1;
@@ -601,12 +601,12 @@ struct vm_rg_struct* get_vm_area_node_at_brk(struct pcb_t *caller, int vmaid, in
  if(vmaid == 0){  
   newrg->vmaid = 0;
   newrg->rg_start = cur_vma->sbrk;
-  newrg->rg_end = newrg->rg_start + size;
+  newrg->rg_end = newrg->rg_start + size - 1;
  }
  else{
   // implement for heap segment  
   newrg->rg_start = cur_vma->sbrk;
-  newrg->rg_end = newrg->rg_start - size;
+  newrg->rg_end = newrg->rg_start - size + 1;
   newrg->vmaid = 1;
  }
 
@@ -657,9 +657,9 @@ int inc_vma_limit(struct pcb_t *caller, int vmaid, int inc_sz, int* inc_limit_re
   int old_end = cur_vma->vm_end;
 
   /*Validate overlap of obtained region */
-  if (validate_overlap_vm_area(caller, vmaid, area->rg_start, area->rg_end)){    
-    return -1; /*Overlap and failed allocation */
-  }
+  // if (validate_overlap_vm_area(caller, vmaid, area->rg_start, area->rg_end)){    
+  //   return -1; /*Overlap and failed allocation */
+  // }
 
   /* TODO: Obtain the new vm area based on vmaid */
   //cur_vma->vm_end... 
@@ -720,6 +720,7 @@ int find_victim_page(struct mm_struct *mm, int *retpgn)
  */
 int get_free_vmrg_area(struct pcb_t *caller, int vmaid, int size, struct vm_rg_struct *newrg)
 {
+  size -= 1;
   struct vm_area_struct *cur_vma = get_vma_by_num(caller->mm, vmaid);
 
   if (cur_vma == NULL || cur_vma->vm_freerg_list == NULL)
