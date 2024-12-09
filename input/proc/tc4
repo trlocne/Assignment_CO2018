@@ -1,0 +1,15 @@
+0 14
+alloc 900 1
+alloc 900 2
+write 10 1 90
+read 1 90 2
+read 2 90 1
+free 1
+free 2
+malloc 900 1
+malloc 900 2
+write 10 1 90
+read 1 90 2
+read 2 90 1
+free 1
+free 2
