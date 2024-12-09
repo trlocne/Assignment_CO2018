@@ -280,7 +280,7 @@ int init_mm(struct mm_struct *mm, struct pcb_t *caller)
 
   /* TODO: update one vma for HEAP */  
   vma1->vm_id = 1;
-  vma1->vm_start = caller->vmemsz;
+  vma1->vm_start = caller->vmemsz - 1;
   vma1->vm_end = vma1->vm_start;
   vma1->sbrk = vma1->vm_start;  
   vma1->vm_next = NULL;
@@ -413,14 +413,14 @@ int print_pgtbl(struct pcb_t *caller, uint32_t start, uint32_t end)
   pgn_start = PAGING_PGN(start);
   pgn_end = PAGING_PGN(end);
 
-  printf("print_pgtbl_data: %d - %d", start, end);
+  printf("\tprint_pgtbl_data: %d - %d", start, end);
   if (caller == NULL) {printf("NULL caller\n"); return -1;}
   printf("\n");
 
 
   for(pgit = pgn_start; pgit < pgn_end; pgit++)
   {
-     printf("%08x: %08x\n", pgit * 4, caller->mm->pgd[pgit]);
+     printf("\t%08x: %08x\n", pgit * 4, caller->mm->pgd[pgit]);
   }
 
   // print heap  
@@ -431,10 +431,10 @@ int print_pgtbl(struct pcb_t *caller, uint32_t start, uint32_t end)
   pgn_start = PAGING_PGN(caller->vmemsz);
   pgn_end = PAGING_PGN(end);
 
-  printf("print_pgtbl_heap: %d - %d\n", start, end);  
+  printf("\tprint_pgtbl_heap: %d - %d\n", start, end);  
   for(pgit = pgn_start; pgit > pgn_end; pgit--)
   {
-    printf("%08x: %08x\n", pgit * 4, caller->mm->pgd[pgit]);
+    printf("\t%08x: %08x\n", pgit * 4, caller->mm->pgd[pgit]);
   }
 
 

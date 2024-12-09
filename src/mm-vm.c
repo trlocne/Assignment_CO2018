@@ -138,7 +138,7 @@ struct vm_rg_struct *get_symrg_byid(struct mm_struct *mm, int rgid)
     return NULL;
 
   if(mm->symrgtbl[rgid].rg_start == -1 || mm->symrgtbl[rgid].rg_end == -1){
-    printf("ACCESS FREE REGION\n");
+    printf("\tACCESS FREE REGION\n");
     return NULL;
   }
 
@@ -198,8 +198,7 @@ int __alloc(struct pcb_t *caller, int vmaid, int rgid, int size, int *alloc_addr
   pthread_mutex_lock(&mmvm_lock);
   if(abs(cur_vma->vm_end - cur_vma->sbrk) < size){
     if(inc_vma_limit(caller, vmaid, size, &inc_limit_ret) != 0){
-      pthread_mutex_unlock(&mmvm_lock);
-      printf("fail inc_vma_limit\n");
+      pthread_mutex_unlock(&mmvm_lock);      
       return -1;
     }
   }
@@ -210,28 +209,17 @@ int __alloc(struct pcb_t *caller, int vmaid, int rgid, int size, int *alloc_addr
     caller->mm->symrgtbl[rgid].rg_start = old_sbrk;
     caller->mm->symrgtbl[rgid].rg_end = old_sbrk + size - 1;
     caller->mm->symrgtbl[rgid].vmaid = vmaid;    
-    cur_vma->sbrk += size;
-    // if (old_sbrk + size < inc_limit_ret)
-    // {      
-    //   struct vm_rg_struct *remain_rg = init_vm_rg(old_sbrk + size, cur_vma->vm_end, vmaid);
-    //   enlist_vm_freerg_list(caller->mm, remain_rg);
-    // }
+    cur_vma->sbrk += size;    
 
   }
   else{
     caller->mm->symrgtbl[rgid].rg_start = old_sbrk;
     caller->mm->symrgtbl[rgid].rg_end = old_sbrk - size + 1;
     caller->mm->symrgtbl[rgid].vmaid = vmaid;    
-    cur_vma->sbrk -= size;
-    // if (old_sbrk - size > inc_limit_ret)
-    // {      
-    //   struct vm_rg_struct *remain_rg = init_vm_rg(old_sbrk - size, cur_vma->vm_end, vmaid);
-    //   enlist_vm_freerg_list(caller->mm, remain_rg);
-    //   print_list_rg(cur_vma->vm_freerg_list);
-    // }
+    cur_vma->sbrk -= size;    
   }
 
-  printf("register: %d; start: %ld; end: %ld\n", rgid, caller->mm->symrgtbl[rgid].rg_start, caller->mm->symrgtbl[rgid].rg_end);
+  printf("\tregister: %d; start: %ld; end: %ld\n", rgid, caller->mm->symrgtbl[rgid].rg_start, caller->mm->symrgtbl[rgid].rg_end);
   
 
   // collect the remain region
@@ -413,8 +401,7 @@ int pg_getval(struct mm_struct *mm, int addr, BYTE *data, struct pcb_t *caller, 
  *
  */
 int pg_setval(struct mm_struct *mm, int addr, BYTE value, struct pcb_t *caller, int vmaid)
-{
-  // printf("addr set val: %08x\n", addr);  
+{  
   int pgn = PAGING_PGN(addr);
   int off = PAGING_OFFST(addr);
   
@@ -457,7 +444,7 @@ int __read(struct pcb_t *caller, int rgid, int offset, BYTE *data)
   if(cur_vma == NULL) /* Invalid memory identify */
 	  return -1;
   if(offset > abs(currg->rg_start - currg->rg_end)){
-    printf("ACCESS OUT OF REGION\n");
+    printf("\tACCESS OUT OF REGION\n");
     return -1;
   } 
   if(currg->vmaid == 0){
@@ -485,7 +472,7 @@ int pgread(
   int val = __read(proc, source, offset, &data);  
   
 #ifdef IODUMP
-  printf("read region=%d offset=%d value=%d\n", source, offset, data);
+  printf("\tread region=%d offset=%d value=%d\n", source, offset, data);
 #ifdef PAGETBL_DUMP
   print_pgtbl(proc, 0, -1); //print max TBL
 #endif
@@ -514,7 +501,7 @@ int __write(struct pcb_t *caller, int rgid, int offset, BYTE value)
 
   struct vm_area_struct *cur_vma = get_vma_by_num(caller->mm, vmaid); 
   if(offset > abs(currg->rg_start - currg->rg_end)){
-    printf("ACCESS OUT OF REGION\n");
+    printf("\tACCESS OUT OF REGION\n");
     return -1;
   } 
   
@@ -540,7 +527,7 @@ int pgwrite(
 {
   int val = __write(proc, destination, offset, data);
 #ifdef IODUMP
-  printf("write region=%d offset=%d value=%d\n", destination, offset, data);
+  printf("\twrite region=%d offset=%d value=%d\n", destination, offset, data);
 #ifdef PAGETBL_DUMP
   print_pgtbl(proc, 0, -1); //print max TBL
 #endif
@@ -772,11 +759,9 @@ int get_free_vmrg_area(struct pcb_t *caller, int vmaid, int size, struct vm_rg_s
       }
     }
     else if (vmaid == 1) // Heap region: allocate from high to low address
-    {             
-      printf("size: %d; vmaid: %d; end: %ld; start: %ld\n", size, vmaid, rgit->rg_end, rgit->rg_start);
+    {                   
       if (rgit->rg_end + size <= rgit->rg_start)
-      {     
-        printf("end: %ld; start: %ld\n", rgit->rg_end, rgit->rg_start) ;
+      {             
         // Current region has enough space
         newrg->rg_start = rgit->rg_start;
         newrg->rg_end = rgit->rg_start - size;
