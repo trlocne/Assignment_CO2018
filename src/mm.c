@@ -280,7 +280,7 @@ int init_mm(struct mm_struct *mm, struct pcb_t *caller)
 
   /* TODO: update one vma for HEAP */  
   vma1->vm_id = 1;
-  vma1->vm_start = caller->vmemsz - 1;
+  vma1->vm_start = caller->vmemsz;
   vma1->vm_end = vma1->vm_start;
   vma1->sbrk = vma1->vm_start;  
   vma1->vm_next = NULL;
