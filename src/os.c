@@ -182,8 +182,7 @@ static void read_config(const char * path) {
 #ifdef MM_PAGIMG_HEAP_GODOWN
 	fscanf(file, "%d\n", &vmemsz);
 #endif
-
-       fscanf(file, "\n"); /* Final character */
+    fscanf(file, "\n"); /* Final character */
 #endif
 #endif
 

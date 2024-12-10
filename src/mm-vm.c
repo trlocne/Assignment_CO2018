@@ -169,6 +169,8 @@ int __alloc(struct pcb_t *caller, int vmaid, int rgid, int size, int *alloc_addr
     caller->mm->symrgtbl[rgid].vmaid = vmaid;
 
     *alloc_addr = rgnode.rg_start;    
+    printf("\tregister: %d; start: %ld; end: %ld\n", rgid, caller->mm->symrgtbl[rgid].rg_start, caller->mm->symrgtbl[rgid].rg_end);
+    print_pgtbl(caller, 0, -1);
 
     return 0;
   }      
@@ -470,9 +472,12 @@ int pgread(
 {
   BYTE data;
   int val = __read(proc, source, offset, &data);  
+  if(val == -1){
+    return val;
+  }
   
 #ifdef IODUMP
-  printf("\tread region=%d offset=%d value=%d\n", source, offset, data);
+  printf("\tread register=%d offset=%d value=%d in region=%d\n", source, offset, data, proc->mm->symrgtbl[source].vmaid);
 #ifdef PAGETBL_DUMP
   print_pgtbl(proc, 0, -1); //print max TBL
 #endif
@@ -526,8 +531,11 @@ int pgwrite(
 		uint32_t offset)
 {
   int val = __write(proc, destination, offset, data);
+  if(val == -1){
+    return val;
+  }
 #ifdef IODUMP
-  printf("\twrite region=%d offset=%d value=%d\n", destination, offset, data);
+  printf("\twrite register=%d offset=%d value=%d in region=%d\n", destination, offset, data, proc->mm->symrgtbl[destination].vmaid);
 #ifdef PAGETBL_DUMP
   print_pgtbl(proc, 0, -1); //print max TBL
 #endif
