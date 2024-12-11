@@ -351,9 +351,12 @@ int pg_getpage(struct mm_struct *mm, int pgn, int *fpn, struct pcb_t *caller)
 
     /* Do swap frame from MEMRAM to MEMSWP and vice versa*/
     /* Copy victim frame to swap */
-    __swap_cp_page(caller->mram, vicfpn, caller->active_mswp, swpfpn);
-    /* Copy target frame from swap to mem */
-    __swap_cp_page(caller->active_mswp, tgtfpn, caller->mram, vicfpn);
+    if((vicpte >> 28) & 1){
+      __swap_cp_page(caller->mram, vicfpn, caller->active_mswp, swpfpn);
+      /* Copy target frame from swap to mem */
+      __swap_cp_page(caller->active_mswp, tgtfpn, caller->mram, vicfpn);
+    }
+    
 
     /* Update page table */
     pte_set_swap(&mm->pgd[vicpgn], 0, swpfpn);
@@ -361,7 +364,9 @@ int pg_getpage(struct mm_struct *mm, int pgn, int *fpn, struct pcb_t *caller)
     /* Update its online status of the target page */
     //pte_set_fpn() & mm->pgd[pgn];
     pte_set_fpn(&pte, vicfpn);
+    CLRBIT(pte, PAGING_PTE_DIRTY_MASK);
     mm->pgd[pgn] = pte;
+    
 
     enlist_pgn_node(&caller->mm->fifo_pgn,pgn);
   }
@@ -381,7 +386,7 @@ int pg_getval(struct mm_struct *mm, int addr, BYTE *data, struct pcb_t *caller, 
 {
   int pgn = PAGING_PGN(addr);
   int off = PAGING_OFFST(addr);
-  // pgn = vmaid ? (pgn + 1) : pgn;
+  pgn = vmaid ? (pgn + 1) : pgn;
   off = vmaid ? (256 - off) : off;
   int fpn;
 
@@ -407,21 +412,21 @@ int pg_setval(struct mm_struct *mm, int addr, BYTE value, struct pcb_t *caller, 
   int pgn = PAGING_PGN(addr);
   int off = PAGING_OFFST(addr);
   
-  // pgn = vmaid ? (pgn + 1) : pgn;
+
+  pgn = vmaid ? (pgn + 1) : pgn;
   off = vmaid ? (256 - off) : off;
   int fpn;
-    
-  
+
   /* Get the page to MEMRAM, swap from MEMSWAP if needed */
   if(pg_getpage(mm, pgn, &fpn, caller) != 0) {    
     return -1; /* invalid page access */
-  }
-    
-
+  }  
+  // PAGING_PTE_SET_DIRTY(mm->pgd[pgn]);
+      
   int phyaddr = (fpn << PAGING_ADDR_FPN_LOBIT) + off;  
   // set dirty bit
   if(MEMPHY_write(caller->mram,phyaddr, value) == 0){
-    // PAGING_PTE_SET_DIRTY(mm->pgd[pgn]);
+    PAGING_PTE_SET_DIRTY(mm->pgd[pgn]);
   }
 
    return 0;
@@ -470,9 +475,11 @@ int pgread(
 		uint32_t offset, // Source address = [source] + [offset]
 		uint32_t destination) 
 {
+  pthread_mutex_lock(&mmvm_lock);
   BYTE data;
   int val = __read(proc, source, offset, &data);  
   if(val == -1){
+    pthread_mutex_unlock(&mmvm_lock);
     return val;
   }
   
@@ -483,6 +490,8 @@ int pgread(
 #endif
   MEMPHY_dump(proc->mram);
 #endif  
+  pthread_mutex_unlock(&mmvm_lock);
+  // proc->mm->pgd[d]
   pgwrite(proc, data, destination, offset);
 
   return val;
@@ -530,8 +539,10 @@ int pgwrite(
 		uint32_t destination, // Index of destination register
 		uint32_t offset)
 {
+  pthread_mutex_lock(&mmvm_lock);
   int val = __write(proc, destination, offset, data);
   if(val == -1){
+    pthread_mutex_unlock(&mmvm_lock);
     return val;
   }
 #ifdef IODUMP
@@ -541,6 +552,7 @@ int pgwrite(
 #endif
   MEMPHY_dump(proc->mram);
 #endif
+  pthread_mutex_unlock(&mmvm_lock);
   return val;
 }
 
@@ -721,8 +733,7 @@ int get_free_vmrg_area(struct pcb_t *caller, int vmaid, int size, struct vm_rg_s
   if (cur_vma == NULL || cur_vma->vm_freerg_list == NULL)
     return -1;
 
-  struct vm_rg_struct *rgit = cur_vma->vm_freerg_list;
-  // print_list_rg(cur_vma->vm_freerg_list);
+  struct vm_rg_struct *rgit = cur_vma->vm_freerg_list;  
   /* Probe uninitialized newrg */
   newrg->rg_start = newrg->rg_end = -1;
 

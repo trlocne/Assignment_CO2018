@@ -1,0 +1,5 @@
+1 4
+alloc 200 1
+alloc 300 2
+malloc 200 3
+malloc 300 4

@@ -8,4 +8,4 @@ malloc 200 1
 malloc 200 2
 free 1
 free 2
-malloc 400 3
+malloc 400 4

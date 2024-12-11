@@ -1,15 +1,11 @@
-0 14
+0 10
 alloc 900 1
 alloc 900 2
-write 10 1 90
+write 12 1 90
+write 10 1 300
+write 10 1 600
+write 10 1 800
+write 10 2 800
 read 1 90 2
 read 2 90 1
-free 1
-free 2
-malloc 900 1
-malloc 900 2
-write 10 1 90
-read 1 90 2
-read 2 90 1
-free 1
-free 2
+read 1 300 2    
